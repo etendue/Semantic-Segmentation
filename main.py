@@ -55,14 +55,15 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     # TODO: Implement function
-    output = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, strides=(1, 1))
-    input  = tf.layers.conv2d_transpose(output,num_classes,4,strides=(2,2))
-    pool_4 = tf.layers.conv2d(vgg_layer4_out,num_classes,1,strides=(1,1))
-    input = tf.add(input,pool_4)
-    input = tf.layers.conv2d_transpose(input,num_classes,4,strides=(2,2))
-    pool_3 = tf.layers.conv2d(vgg_layer7_out,num_classes,1,strides=(1,1))
-    input = tf.add(input,pool_3)
-    final = tf.layers.conv2d_transpose(input,num_classes,16,strides=(8,8))
+    fcn1 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, strides=(1, 1))
+    fcn4  = tf.layers.conv2d_transpose(fcn1,num_classes,4,strides=(4,4))
+    # parameters for pool_4 shall be zero initialized mentioned in paper
+    pool_4 = tf.layers.conv2d(vgg_layer4_out,num_classes,1,strides=(1,1),kernel_initializer=tf.zeros_initializer())
+    pool_4_2x = tf.layers.conv2d_transpose(pool_4,num_classes,4,strides=(2,2))
+    # parameters for pool_3 shall be zero initialized mentioned in paper
+    pool_3 = tf.layers.conv2d(vgg_layer7_out,num_classes,1,strides=(1,1),kernel_initializer=tf.zeros_initializer())
+    skip3_4 = tf.add(pool_3,tf.add(fcn4,pool_4_2x))
+    final = tf.layers.conv2d_transpose(skip3_4,num_classes,16,strides=(8,8))
 
     return final
 tests.test_layers(layers)
