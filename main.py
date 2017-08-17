@@ -150,14 +150,28 @@ def run():
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
+        # for mean_iou
+        sess.run(tf.local_variables_initializer())
+
         # TODO: Build NN using load_vgg, layers, and optimize function
         input_image, keep_prob, layer3_out, layer4_out, layer7_out = load_vgg(sess,vgg_path)
         fcn8 = layers(layer7_out,layer4_out,layer3_out,num_classes)
         logits, train_op, cross_entropy_loss = optimize(fcn8,correct_label,learning_rate,num_classes)
+        ground_truth = tf.argmax(correct_label, 1)
+        prediction = tf.argmax(logits,1)
+        iou, iou_op = tf.metrics.mean_iou(ground_truth, prediction, num_classes)
 
         # TODO: Train NN using the train_nn function
         train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
              correct_label, keep_prob, learning_rate)
+
+        sess.run(iou_op)
+        iou_value = sess.run(iou)
+
+        print("IOU :{}".format(iou_value))
+
+        tf.train.Saver.save(sess,"./model.ckpt")
+
         # TODO: Save inference data using helper.save_inference_samples
         helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
 
