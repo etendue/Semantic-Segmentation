@@ -20,6 +20,31 @@ class DLProgress(tqdm):
         self.update((block_num - self.last_block) * block_size)
         self.last_block = block_num
 
+def maybe_download_road_data(data_dir):
+    """
+    Download and extract training data if it doesn't exist
+    :param data_dir: Directory to download the model to
+    """
+    data_road_filename = 'data_road.zip'
+    data_road_path = os.path.join(data_dir, 'data_road')
+
+    if not os.path.exists(data_road_path):
+        # Download data file
+        print('Downloading road data...')
+        with DLProgress(unit='B', unit_scale=True, miniters=1) as pbar:
+            urlretrieve(
+                'http://kitti.is.tue.mpg.de/kitti/data_road.zip',
+                os.path.join(data_dir, data_road_filename),
+                pbar.hook)
+
+        # Extract data file
+        print('Extracting data...')
+        zip_ref = zipfile.ZipFile(os.path.join(data_dir, data_road_filename), 'r')
+        zip_ref.extractall(data_dir)
+        zip_ref.close()
+
+        # Remove zip file to save space
+        os.remove(os.path.join(data_dir, data_road_filename))
 
 def maybe_download_pretrained_vgg(data_dir):
     """
