@@ -48,14 +48,14 @@ tests.test_load_vgg(load_vgg, tf)
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     """
     Create the layers for a fully convolutional network.  Build skip-layers using the vgg layers.
-    :param vgg_layer7_out: TF Tensor for VGG Layer 3 output
+    :param vgg_layer3_out: TF Tensor for VGG Layer 3 output
     :param vgg_layer4_out: TF Tensor for VGG Layer 4 output
-    :param vgg_layer3_out: TF Tensor for VGG Layer 7 output
+    :param vgg_layer7_out: TF Tensor for VGG Layer 7 output
     :param num_classes: Number of classes to classify
     :return: The Tensor for the last layer of output
     """
     # TODO: Implement function
-    fc7 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, strides=(1, 1))
+    fc7 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, strides=(1, 1))
     fc7_2x  = tf.layers.conv2d_transpose(fc7,num_classes,4,strides=(2,2),padding="same")
     # parameters for pool_4 shall be zero initialized mentioned in paper
     # confused here, if weights and bias are initialized zero, no learning will happen
@@ -65,7 +65,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     skip4_2x = tf.layers.conv2d_transpose(skip4,num_classes,4,strides=(2,2),padding="same")
     # parameters for pool_3 shall be zero initialized mentioned in paper
     # confused here, if weights and bias are initialized zero, no learning will happen
-    pool_3 = tf.layers.conv2d(vgg_layer7_out,num_classes,1,strides=(1,1))
+    pool_3 = tf.layers.conv2d(vgg_layer3_out,num_classes,1,strides=(1,1))
     # concatenate pool 3 and skip_4_2x layer
     skip3  = tf.add(pool_3,skip4_2x)
     final = tf.layers.conv2d_transpose(skip3,num_classes,16,strides=(8,8),padding="same")
@@ -180,7 +180,7 @@ def run():
 
         # TODO: Build NN using load_vgg, layers, and optimize function
         input_image, keep_prob, layer3_out, layer4_out, layer7_out = load_vgg(sess,vgg_path)
-        fcn8 = layers(layer7_out,layer4_out,layer3_out,num_classes)
+        fcn8 = layers(layer3_out,layer4_out,layer7_out,num_classes)
         logits, train_op, cross_entropy_loss = optimize(fcn8,correct_label,learning_rate,num_classes)
         iou, iou_op = mean_iou(logits, correct_label, num_classes)
 
