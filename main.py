@@ -55,15 +55,16 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     # TODO: Implement function
-    fcn1 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, strides=(1, 1))
-    fcn4  = tf.layers.conv2d_transpose(fcn1,num_classes,4,strides=(4,4))
+    fc7 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, strides=(1, 1))
+    fc7_2x  = tf.layers.conv2d_transpose(fc7,num_classes,4,strides=(2,2),padding="same")
     # parameters for pool_4 shall be zero initialized mentioned in paper
-    pool_4 = tf.layers.conv2d(vgg_layer4_out,num_classes,1,strides=(1,1),kernel_initializer=tf.zeros_initializer())
-    pool_4_2x = tf.layers.conv2d_transpose(pool_4,num_classes,4,strides=(2,2))
+    pool_4 = tf.layers.conv2d(vgg_layer4_out,num_classes,1,strides=(1,1))
+    skip4 = tf.add(pool_4,fc7_2x)
+    skip4_2x = tf.layers.conv2d_transpose(skip4,num_classes,4,strides=(2,2),padding="same")
     # parameters for pool_3 shall be zero initialized mentioned in paper
-    pool_3 = tf.layers.conv2d(vgg_layer7_out,num_classes,1,strides=(1,1),kernel_initializer=tf.zeros_initializer())
-    skip3_4 = tf.add(pool_3,tf.add(fcn4,pool_4_2x))
-    final = tf.layers.conv2d_transpose(skip3_4,num_classes,16,strides=(8,8))
+    pool_3 = tf.layers.conv2d(vgg_layer7_out,num_classes,1,strides=(1,1))
+    skip3  = tf.add(pool_3,skip4_2x)
+    final = tf.layers.conv2d_transpose(skip3,num_classes,16,strides=(8,8),padding="same")
 
     return final
 tests.test_layers(layers)
@@ -88,7 +89,7 @@ tests.test_optimize(optimize)
 
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
-             correct_label, keep_prob, learning_rate):
+             correct_label, keep_prob, learning_rate, iou=None, iou_op=None):
     """
     Train neural network and print out the loss during training.
     :param sess: TF Session
@@ -101,10 +102,11 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param correct_label: TF Placeholder for label images
     :param keep_prob: TF Placeholder for dropout keep probability
     :param learning_rate: TF Placeholder for learning rate
+    :param iou: A Tensor representing the mean intersection-over-union
+    :param iou_op: An operation that increments the confusion matrix
     """
      # DONE: Implement function
-    # Initializing the variables
-    sess.run(tf.global_variables_initializer())
+
     
     for epoch in range(epochs):    
         batch_i = 0
@@ -113,12 +115,29 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
                     correct_label:gt_images,
                     keep_prob:0.5,
                     learning_rate: 0.001}
-            train_loss,_= sess.run([cross_entropy_loss,train_op],feed_dict=feed)
-            print('Epoch {:>2}, Batch {} with Loss {}:'.format(epoch, batch_i,train_loss))
+            _,train_loss= sess.run([train_op,cross_entropy_loss],feed_dict=feed)
+            if iou is not None:
+                _,iou_value = sess.run([iou_op,iou],feed_dict={input_image:train_images,correct_label:gt_images,keep_prob:1})
+                print('Epoch {:>2}, Batch {} with Loss {:.3f}: meanIoU:{:.3f}'.format(epoch, batch_i,train_loss,iou_value))
+            else:
+                print('Epoch {:>2}, Batch {} with Loss {:.3f}:'.format(epoch, batch_i, train_loss))
             batch_i +=1
             
 tests.test_train_nn(train_nn)
 
+def mean_iou(logits, correct_label, num_classes):
+    """
+    Build the TensorFLow loss and optimizer operations.
+    :param logits: TF Tensor of logits
+    :param correct_label: TF Placeholder for the correct label image
+    :param num_classes: Number of classes to classify
+    :return: Tuple of  (A Tensor representing the mean intersection-over-union,
+             An operation that increments the confusion matrix)
+    """
+    ground_truth = tf.argmax(tf.reshape(correct_label, (-1, num_classes)), 1)
+    prediction = tf.argmax(logits, 1)
+    iou, iou_op = tf.metrics.mean_iou(ground_truth, prediction, num_classes)
+    return iou, iou_op
 
 def run():
     num_classes = 2
@@ -136,10 +155,12 @@ def run():
     # OPTIONAL: Train and Inference on the cityscapes dataset instead of the Kitti dataset.
     # You'll need a GPU with at least 10 teraFLOPS to train on.
     #  https://www.cityscapes-dataset.com/
+    tf.reset_default_graph()
+
     correct_label = tf.placeholder(tf.float32,shape=[None,image_shape[0],image_shape[1],num_classes], name='correct_label')
     learning_rate = tf.placeholder(tf.float32, name='learning_rate')
-    epochs = 10
-    batch_size = 64
+    epochs = 1
+    batch_size = 4
 
     with tf.Session() as sess:
         # Path to vgg model
@@ -150,27 +171,24 @@ def run():
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
-        # for mean_iou
-        sess.run(tf.local_variables_initializer())
-
         # TODO: Build NN using load_vgg, layers, and optimize function
         input_image, keep_prob, layer3_out, layer4_out, layer7_out = load_vgg(sess,vgg_path)
         fcn8 = layers(layer7_out,layer4_out,layer3_out,num_classes)
         logits, train_op, cross_entropy_loss = optimize(fcn8,correct_label,learning_rate,num_classes)
-        ground_truth = tf.argmax(correct_label, 1)
-        prediction = tf.argmax(logits,1)
-        iou, iou_op = tf.metrics.mean_iou(ground_truth, prediction, num_classes)
+        iou, iou_op = mean_iou(logits, correct_label, num_classes)
 
+        # Initializing the variables
+        sess.run(tf.global_variables_initializer())
+        # for mean_iou
+        sess.run(tf.local_variables_initializer())
         # TODO: Train NN using the train_nn function
+        #tf.train.Saver().restore(sess,"./checkpoints/model.ckpt")
+
         train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
-             correct_label, keep_prob, learning_rate)
+             correct_label, keep_prob, learning_rate,iou,iou_op)
 
-        sess.run(iou_op)
-        iou_value = sess.run(iou)
 
-        print("IOU :{}".format(iou_value))
-
-        tf.train.Saver.save(sess,"./model.ckpt")
+        tf.train.Saver().save(sess,"./checkpoints/model.ckpt")
 
         # TODO: Save inference data using helper.save_inference_samples
         helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
