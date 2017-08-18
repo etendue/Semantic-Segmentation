@@ -24,7 +24,7 @@ def load_vgg(sess, vgg_path):
     :param vgg_path: Path to vgg folder, containing "variables/" and "saved_model.pb"
     :return: Tuple of Tensors from VGG model (image_input, keep_prob, layer3_out, layer4_out, layer7_out)
     """
-    # DONE: Implement function
+    # TODO: Implement function
     #   Use tf.saved_model.loader.load to load the model and weights
     vgg_tag = 'vgg16'
     vgg_input_tensor_name = 'image_input:0'
@@ -58,15 +58,20 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     fc7 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, strides=(1, 1))
     fc7_2x  = tf.layers.conv2d_transpose(fc7,num_classes,4,strides=(2,2),padding="same")
     # parameters for pool_4 shall be zero initialized mentioned in paper
+    # confused here, if weights and bias are initialized zero, no learning will happen
     pool_4 = tf.layers.conv2d(vgg_layer4_out,num_classes,1,strides=(1,1))
     skip4 = tf.add(pool_4,fc7_2x)
+    # 2x the skip4 layer
     skip4_2x = tf.layers.conv2d_transpose(skip4,num_classes,4,strides=(2,2),padding="same")
     # parameters for pool_3 shall be zero initialized mentioned in paper
+    # confused here, if weights and bias are initialized zero, no learning will happen
     pool_3 = tf.layers.conv2d(vgg_layer7_out,num_classes,1,strides=(1,1))
+    # concatenate pool 3 and skip_4_2x layer
     skip3  = tf.add(pool_3,skip4_2x)
     final = tf.layers.conv2d_transpose(skip3,num_classes,16,strides=(8,8),padding="same")
 
     return final
+
 tests.test_layers(layers)
 
 
@@ -79,6 +84,7 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     :param num_classes: Number of classes to classify
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
+    # TODO: Implement function
     logits = tf.reshape(nn_last_layer,(-1,num_classes))
     labels = tf.reshape(correct_label,(-1,num_classes))
     cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits,labels=labels))
@@ -105,9 +111,8 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param iou: A Tensor representing the mean intersection-over-union
     :param iou_op: An operation that increments the confusion matrix
     """
-     # DONE: Implement function
+    # TODO: Implement function
 
-    
     for epoch in range(epochs):    
         batch_i = 0
         for train_images,gt_images in get_batches_fn(batch_size):
@@ -127,7 +132,7 @@ tests.test_train_nn(train_nn)
 
 def mean_iou(logits, correct_label, num_classes):
     """
-    Build the TensorFLow loss and optimizer operations.
+    Get mean_iou tensor and its op.
     :param logits: TF Tensor of logits
     :param correct_label: TF Placeholder for the correct label image
     :param num_classes: Number of classes to classify
@@ -155,12 +160,14 @@ def run():
     # OPTIONAL: Train and Inference on the cityscapes dataset instead of the Kitti dataset.
     # You'll need a GPU with at least 10 teraFLOPS to train on.
     #  https://www.cityscapes-dataset.com/
+
     tf.reset_default_graph()
 
+    # create the tensor for ground truth label and learning rate
     correct_label = tf.placeholder(tf.float32,shape=[None,image_shape[0],image_shape[1],num_classes], name='correct_label')
     learning_rate = tf.placeholder(tf.float32, name='learning_rate')
-    epochs = 1
-    batch_size = 4
+    epochs = 100
+    batch_size = 16
 
     with tf.Session() as sess:
         # Path to vgg model
@@ -182,12 +189,13 @@ def run():
         # for mean_iou
         sess.run(tf.local_variables_initializer())
         # TODO: Train NN using the train_nn function
+        # continue training from last checkpoint
         #tf.train.Saver().restore(sess,"./checkpoints/model.ckpt")
 
         train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
              correct_label, keep_prob, learning_rate,iou,iou_op)
 
-
+        # save current model
         tf.train.Saver().save(sess,"./checkpoints/model.ckpt")
 
         # TODO: Save inference data using helper.save_inference_samples
